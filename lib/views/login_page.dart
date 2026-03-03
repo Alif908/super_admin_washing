@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:super_admin_washing/models/superadminmodel.dart';
+import 'package:super_admin_washing/services/SuperAdminApiService.dart';
 import 'package:super_admin_washing/views/home_page/dashboard.dart';
 import 'package:super_admin_washing/views/sign_up_page.dart';
 
@@ -14,6 +16,7 @@ class _LoginScreenState extends State<LoginScreen>
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _isLoading = false;
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -45,6 +48,76 @@ class _LoginScreenState extends State<LoginScreen>
     super.dispose();
   }
 
+  // ── Validation ──────────────────────────────────────────────────────────
+  String? _validate() {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+    if (email.isEmpty || !email.contains('@'))
+      return 'Please enter a valid email';
+    if (password.isEmpty) return 'Please enter your password';
+    return null;
+  }
+
+  // ── Login handler ────────────────────────────────────────────────────────
+  Future<void> _handleLogin() async {
+    // Step 1: validate
+    final error = _validate();
+    if (error != null) {
+      _showSnack(error, isError: true);
+      return;
+    }
+
+    // Step 2: build LoginRequestModel
+    final LoginRequestModel request = LoginRequestModel(
+      email: _emailController.text.trim(),
+      password: _passwordController.text,
+    );
+
+    // Step 3: call API
+    setState(() => _isLoading = true);
+
+    final Map<String, dynamic> raw = await SuperAdminService.login(
+      email: request.email,
+      password: request.password,
+    );
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    // Step 4: parse into AuthResponseModel
+    final AuthResponseModel response = AuthResponseModel.fromJson(
+      raw,
+      success: raw['success'] ?? false,
+    );
+
+    // Step 5: handle result
+    if (response.success) {
+      // token already saved in SharedPreferences by service
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const FleetDashboardScreen()),
+      );
+    } else {
+      _showSnack(
+        response.message.isNotEmpty
+            ? response.message
+            : 'Invalid email or password',
+        isError: true,
+      );
+    }
+  }
+
+  void _showSnack(String msg, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: isError ? Colors.redAccent : Colors.green,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  // ── Build ────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
@@ -94,7 +167,6 @@ class _LoginScreenState extends State<LoginScreen>
                       children: [
                         GestureDetector(
                           onTap: () {
-                            // ── Navigate to Sign Up ──
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -187,6 +259,7 @@ class _LoginScreenState extends State<LoginScreen>
                             ),
                             SizedBox(height: screenH * 0.032),
 
+                            // LOGIN button
                             SizedBox(
                               width: double.infinity,
                               height: btnH,
@@ -204,15 +277,7 @@ class _LoginScreenState extends State<LoginScreen>
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: ElevatedButton(
-                                  onPressed: () {
-                                    Navigator.pushReplacement(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) =>
-                                            const FleetDashboardScreen(),
-                                      ),
-                                    );
-                                  },
+                                  onPressed: _isLoading ? null : _handleLogin,
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: Colors.transparent,
                                     shadowColor: Colors.transparent,
@@ -220,20 +285,30 @@ class _LoginScreenState extends State<LoginScreen>
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                   ),
-                                  child: Text(
-                                    'LOGIN',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: subSz + 1,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 2,
-                                    ),
-                                  ),
+                                  child: _isLoading
+                                      ? const SizedBox(
+                                          width: 22,
+                                          height: 22,
+                                          child: CircularProgressIndicator(
+                                            color: Colors.white,
+                                            strokeWidth: 2.5,
+                                          ),
+                                        )
+                                      : Text(
+                                          'LOGIN',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: subSz + 1,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 2,
+                                          ),
+                                        ),
                                 ),
                               ),
                             ),
                             SizedBox(height: screenH * 0.024),
 
+                            // Forgot password
                             Center(
                               child: GestureDetector(
                                 onTap: () {},
