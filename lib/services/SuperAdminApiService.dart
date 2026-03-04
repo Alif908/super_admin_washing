@@ -71,10 +71,7 @@ class SuperAdminService {
       ).timeout(const Duration(seconds: 15));
 
       final body = jsonDecode(res.body) as Map<String, dynamic>;
-      return {
-        'success': res.statusCode == 201,
-        ...body,
-      };
+      return {'success': res.statusCode == 201, ...body};
     } catch (e) {
       return {'success': false, 'message': 'Network error: $e'};
     }
@@ -89,22 +86,227 @@ class SuperAdminService {
       final res = await http.post(
         Uri.parse('$_base/login'),
         headers: _jsonHeader,
-        body: jsonEncode({
-          'email':    email,
-          'password': password,
-        }),
+        body: jsonEncode({'email': email, 'password': password}),
       ).timeout(const Duration(seconds: 15));
 
       final body = jsonDecode(res.body) as Map<String, dynamic>;
-
       if (res.statusCode == 200 && body['token'] != null) {
         await _saveToken(body['token']);
       }
+      return {'success': res.statusCode == 200, ...body};
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
 
-      return {
-        'success': res.statusCode == 200,
-        ...body,
+  // ─────────────────────────────────────────────
+  //  PACKAGES
+  // ─────────────────────────────────────────────
+
+  /// POST /api/superadmin/packages
+  static Future<Map<String, dynamic>> addPackage({
+    required String packageName,
+    String? description,
+    required double price,
+    String? statusCode,
+  }) async {
+    try {
+      final body = <String, dynamic>{
+        'packageName': packageName,
+        'price': price,
       };
+      if (description != null && description.isNotEmpty) body['description'] = description;
+      if (statusCode != null && statusCode.isNotEmpty)   body['statusCode']   = statusCode;
+
+      final res = await http.post(
+        Uri.parse('$_base/packages'),
+        headers: await _authHeader(),
+        body: jsonEncode(body),
+      ).timeout(const Duration(seconds: 15));
+
+      final resBody = jsonDecode(res.body) as Map<String, dynamic>;
+      return {
+        'success': res.statusCode == 200 || res.statusCode == 201,
+        ...resBody,
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  /// GET /api/superadmin/packages
+  static Future<Map<String, dynamic>> getAllPackages() async {
+    try {
+      final res = await http.get(
+        Uri.parse('$_base/packages'),
+        headers: await _authHeader(),
+      ).timeout(const Duration(seconds: 15));
+
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      return {'success': res.statusCode == 200, ...body};
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  //  HUBS
+  // ─────────────────────────────────────────────
+
+  /// POST /api/superadmin/hubs
+  static Future<Map<String, dynamic>> registerHub({
+    required String hubName,
+    String? hubCode,
+    double? latitude,
+    double? longitude,
+    required String hubOwnerName,
+    required int hubOwnerId,
+    required String email,
+    required String mobile,
+    String? address,
+    String? bankName,
+    String? accountNumber,
+    String? ifscCode,
+    String? operatorName,
+    String? operatorMobile,
+  }) async {
+    try {
+      final body = <String, dynamic>{
+        'hubName':      hubName,
+        'hubOwnerId':   hubOwnerId,
+        'hubOwnerName': hubOwnerName,
+        'email':        email,
+        'mobile':       mobile,
+      };
+      if (hubCode != null && hubCode.isNotEmpty)               body['hubCode']        = hubCode;
+      if (latitude != null)                                    body['latitude']       = latitude;
+      if (longitude != null)                                   body['longitude']      = longitude;
+      if (address != null && address.isNotEmpty)               body['address']        = address;
+      if (bankName != null && bankName.isNotEmpty)             body['bankName']       = bankName;
+      if (accountNumber != null && accountNumber.isNotEmpty)   body['accountNumber']  = accountNumber;
+      if (ifscCode != null && ifscCode.isNotEmpty)             body['ifscCode']       = ifscCode;
+      if (operatorName != null && operatorName.isNotEmpty)     body['operatorName']   = operatorName;
+      if (operatorMobile != null && operatorMobile.isNotEmpty) body['operatorMobile'] = operatorMobile;
+
+      final res = await http.post(
+        Uri.parse('$_base/hubs'),
+        headers: await _authHeader(),
+        body: jsonEncode(body),
+      ).timeout(const Duration(seconds: 15));
+
+      final resBody = jsonDecode(res.body) as Map<String, dynamic>;
+      return {
+        'success': res.statusCode == 200 || res.statusCode == 201,
+        ...resBody,
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  /// GET /api/superadmin/hubs
+  static Future<Map<String, dynamic>> getAllHubs() async {
+    try {
+      final res = await http.get(
+        Uri.parse('$_base/hubs'),
+        headers: await _authHeader(),
+      ).timeout(const Duration(seconds: 15));
+
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      return {'success': res.statusCode == 200, ...body};
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  //  COUPONS
+  // ─────────────────────────────────────────────
+
+  /// POST /api/superadmin/coupons
+  static Future<Map<String, dynamic>> addCoupon({
+    required String couponCode,
+    required double discountPercentage,
+    required int maxUsagePerUser,
+    required DateTime expiryDate,
+  }) async {
+    try {
+      final body = <String, dynamic>{
+        'couponCode':         couponCode,
+        'discountPercentage': discountPercentage,
+        'maxUsagePerUser':    maxUsagePerUser,
+        'expiryDate': '${expiryDate.year}-'
+            '${expiryDate.month.toString().padLeft(2, '0')}-'
+            '${expiryDate.day.toString().padLeft(2, '0')}',
+      };
+
+      final res = await http.post(
+        Uri.parse('$_base/coupons'),
+        headers: await _authHeader(),
+        body: jsonEncode(body),
+      ).timeout(const Duration(seconds: 15));
+
+      final resBody = jsonDecode(res.body) as Map<String, dynamic>;
+      return {
+        'success': res.statusCode == 200 || res.statusCode == 201,
+        ...resBody,
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  /// GET /api/superadmin/coupons
+  static Future<Map<String, dynamic>> getAllCoupons() async {
+    try {
+      final res = await http.get(
+        Uri.parse('$_base/coupons'),
+        headers: await _authHeader(),
+      ).timeout(const Duration(seconds: 15));
+
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      return {'success': res.statusCode == 200, ...body};
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  //  DEVICES
+  // ─────────────────────────────────────────────
+
+  /// POST /api/superadmin/devices
+  /// Registers a new device by its deviceId string.
+  static Future<Map<String, dynamic>> addDevice({
+    required String deviceId,
+  }) async {
+    try {
+      final res = await http.post(
+        Uri.parse('$_base/devices'),
+        headers: await _authHeader(),
+        body: jsonEncode({'deviceId': deviceId}),
+      ).timeout(const Duration(seconds: 15));
+
+      final resBody = jsonDecode(res.body) as Map<String, dynamic>;
+      return {
+        'success': res.statusCode == 200 || res.statusCode == 201,
+        ...resBody,
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  /// GET /api/superadmin/devices
+  static Future<Map<String, dynamic>> getAllDevices() async {
+    try {
+      final res = await http.get(
+        Uri.parse('$_base/devices'),
+        headers: await _authHeader(),
+      ).timeout(const Duration(seconds: 15));
+
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      return {'success': res.statusCode == 200, ...body};
     } catch (e) {
       return {'success': false, 'message': 'Network error: $e'};
     }
@@ -123,10 +325,7 @@ class SuperAdminService {
       final res = await http.post(
         Uri.parse('$_base/assign-devices'),
         headers: await _authHeader(),
-        body: jsonEncode({
-          'hubId':    hubId,
-          'deviceId': deviceId,
-        }),
+        body: jsonEncode({'hubId': hubId, 'deviceId': deviceId}),
       ).timeout(const Duration(seconds: 15));
 
       final body = jsonDecode(res.body) as Map<String, dynamic>;
@@ -171,7 +370,6 @@ class SuperAdminService {
   }
 
   /// PUT /api/superadmin/service-request/:hubId/update-status/:requestId
-  /// status = "pending" | "in_progress" | "completed"
   static Future<Map<String, dynamic>> updateServiceRequestStatus({
     required int hubId,
     required int requestId,

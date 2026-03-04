@@ -1,13 +1,34 @@
 part of 'dashboard.dart';
 
 mixin _AddCouponMixin<T extends StatefulWidget> on State<T> {
+  // ── live list of coupons fetched from API ──
+  List<CouponModel> _coupons = [];
+
+  // ── fetch all coupons ──
+  Future<void> _fetchCoupons() async {
+    try {
+      final raw = await SuperAdminService.getAllCoupons();
+      if (raw['success'] == true) {
+        final list = (raw['data'] as List? ?? raw['coupons'] as List? ?? [])
+            .map((e) => CouponModel.fromJson(e))
+            .toList();
+        if (mounted) setState(() => _coupons = list);
+        debugPrint('✅ [COUPONS] total:${_coupons.length}');
+      }
+    } catch (e) {
+      debugPrint('❌ [COUPONS] $e');
+    }
+  }
+
   void _showAddCouponDialog(BuildContext ctx, double ssz) {
-    final codeCtrl = TextEditingController();
+    final codeCtrl     = TextEditingController();
     final discountCtrl = TextEditingController();
     final maxUsageCtrl = TextEditingController();
     DateTime? _selectedDate;
     final dateCtrl = TextEditingController(text: '');
     final sw = MediaQuery.of(ctx).size.width;
+
+    bool _submitting = false;
 
     showDialog(
       context: ctx,
@@ -174,22 +195,98 @@ mixin _AddCouponMixin<T extends StatefulWidget> on State<T> {
                   width: double.infinity,
                   height: 48,
                   child: ElevatedButton(
-                    onPressed: () => Navigator.pop(dialogCtx),
+                    onPressed: _submitting
+                        ? null
+                        : () async {
+                            // ── validation ───────────────────────
+                            final code     = codeCtrl.text.trim();
+                            final discount = double.tryParse(
+                              discountCtrl.text.trim(),
+                            );
+                            final maxUsage = int.tryParse(
+                              maxUsageCtrl.text.trim(),
+                            );
+
+                            if (code.isEmpty) {
+                              _showCouponSnack(ctx, 'Coupon code is required');
+                              return;
+                            }
+                            if (discount == null ||
+                                discount <= 0 ||
+                                discount > 100) {
+                              _showCouponSnack(
+                                ctx,
+                                'Enter a valid discount (1–100)',
+                              );
+                              return;
+                            }
+                            if (maxUsage == null || maxUsage < 1) {
+                              _showCouponSnack(
+                                ctx,
+                                'Enter a valid max usage per user',
+                              );
+                              return;
+                            }
+                            if (_selectedDate == null) {
+                              _showCouponSnack(ctx, 'Please select an expiry date');
+                              return;
+                            }
+
+                            // ── call API ─────────────────────────
+                            setDialogState(() => _submitting = true);
+
+                            final raw = await SuperAdminService.addCoupon(
+                              couponCode: code,
+                              discountPercentage: discount,
+                              maxUsagePerUser: maxUsage,
+                              expiryDate: _selectedDate!,
+                            );
+
+                            setDialogState(() => _submitting = false);
+
+                            if (raw['success'] == true) {
+                              await _fetchCoupons();
+                              if (dialogCtx.mounted) {
+                                Navigator.pop(dialogCtx);
+                              }
+                              _showCouponSnack(
+                                ctx,
+                                raw['message'] ?? 'Coupon added successfully!',
+                                success: true,
+                              );
+                            } else {
+                              _showCouponSnack(
+                                ctx,
+                                raw['message'] ?? 'Failed to add coupon',
+                              );
+                            }
+                          },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFE53935),
+                      backgroundColor: _submitting
+                          ? Colors.grey
+                          : const Color(0xFFE53935),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
                       elevation: 0,
                     ),
-                    child: Text(
-                      'Add Coupon',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: ssz + 1,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    child: _submitting
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : Text(
+                            'Add Coupon',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: ssz + 1,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                   ),
                 ),
               ],
@@ -199,9 +296,22 @@ mixin _AddCouponMixin<T extends StatefulWidget> on State<T> {
       ),
     );
   }
+
+  // ── snackbar helper ──────────────────────────────────────────────────────
+  void _showCouponSnack(BuildContext ctx, String msg, {bool success = false}) {
+    if (!ctx.mounted) return;
+    ScaffoldMessenger.of(ctx).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: success ? _green : _red,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
 }
 
-// ── Labelled text field used inside the coupon dialog ─────────────────────────
+// ── Labelled text field used inside the coupon dialog ────────────────────────
 class _CouponField extends StatelessWidget {
   final String label;
   final TextEditingController ctrl;

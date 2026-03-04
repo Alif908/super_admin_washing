@@ -1,41 +1,57 @@
 part of 'dashboard.dart';
 
 mixin _DownloadReportMixin<T extends StatefulWidget> on State<T> {
-  // ── Sample transaction data (replace with your real data source) ──────
-  final List<Map<String, String>> _transactions = const [
-    {
-      'Order ID': '2',
-      'Device ID': 'DEV001',
-      'Device Name': 'Pressure Washer Pro 4000',
-      'Hub': 'Calicut Express Wash Hub',
-      'User': 'User A',
-      'Amount': '180',
-      'Status': 'Completed',
-      'Date': '2026-02-27',
-    },
-    {
-      'Order ID': '1',
-      'Device ID': 'DEV001',
-      'Device Name': 'Pressure Washer Pro 4000',
-      'Hub': 'Calicut Express Wash Hub',
-      'User': 'User A',
-      'Amount': '180',
-      'Status': 'Completed',
-      'Date': '2026-02-20',
-    },
-  ];
-
   Future<void> _downloadFullReport() async {
     try {
-      // ── Build CSV ──────────────────────────────────────────────────
-      final headers = _transactions.first.keys.toList();
+      // ── Fetch live wash history from API ───────────────────────────
+      final raw = await SuperAdminService.getAllWashHistory();
+
+      List<WashHistoryModel> history = [];
+      if (raw['success'] == true) {
+        history = (raw['data'] as List? ?? [])
+            .map((e) => WashHistoryModel.fromJson(e))
+            .toList();
+      }
+
+      if (history.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No wash history available to export.'),
+              backgroundColor: _red,
+            ),
+          );
+        }
+        return;
+      }
+
+      // ── Build CSV from live data ───────────────────────────────────
+      const headers = [
+        'Order ID',
+        'Device ID',
+        'Device Name',
+        'Hub',
+        'User',
+        'Amount',
+        'Date',
+      ];
+
       final csvBuffer = StringBuffer();
       csvBuffer.writeln(headers.map(_csvEscape).join(','));
-      for (final row in _transactions) {
-        csvBuffer.writeln(
-          headers.map((h) => _csvEscape(row[h] ?? '')).join(','),
-        );
+
+      for (final w in history) {
+        final row = [
+          '${w.id}',
+          w.device?.deviceId ?? '-',
+          w.device?.deviceName ?? '-',
+          w.hub?.hubName ?? '-',
+          w.user?.name ?? '-',
+          w.finalAmount != null ? w.finalAmount!.toStringAsFixed(2) : '0.00',
+          w.createdAt ?? '-',
+        ];
+        csvBuffer.writeln(row.map(_csvEscape).join(','));
       }
+
       final csvString = csvBuffer.toString();
 
       // ── Resolve save path ──────────────────────────────────────────
@@ -48,14 +64,11 @@ mixin _DownloadReportMixin<T extends StatefulWidget> on State<T> {
       Directory? saveDir;
 
       if (Platform.isAndroid) {
-        // Android: save directly to /storage/emulated/0/Download
         saveDir = Directory('/storage/emulated/0/Download');
         if (!await saveDir.exists()) {
-          // Fallback to app external storage if Download not accessible
           saveDir = await getExternalStorageDirectory();
         }
       } else if (Platform.isIOS) {
-        // iOS: save to app Documents folder (visible in Files app)
         saveDir = await getApplicationDocumentsDirectory();
       } else {
         saveDir = await getTemporaryDirectory();
@@ -63,6 +76,8 @@ mixin _DownloadReportMixin<T extends StatefulWidget> on State<T> {
 
       final file = File('${saveDir!.path}/$fileName');
       await file.writeAsString(csvString);
+
+      debugPrint('✅ [REPORT] saved ${history.length} rows → ${file.path}');
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -94,6 +109,7 @@ mixin _DownloadReportMixin<T extends StatefulWidget> on State<T> {
         );
       }
     } catch (e) {
+      debugPrint('❌ [REPORT] $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Export failed: $e'), backgroundColor: _red),
