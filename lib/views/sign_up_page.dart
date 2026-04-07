@@ -12,12 +12,12 @@ class SignUpScreen extends StatefulWidget {
 
 class _SignUpScreenState extends State<SignUpScreen>
     with SingleTickerProviderStateMixin {
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _mobileController = TextEditingController();
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _mobileController = TextEditingController();
   bool _obscurePassword = true;
-  bool _isLoading = false; // ← ADD 3
+  bool _isLoading = false;
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -51,7 +51,7 @@ class _SignUpScreenState extends State<SignUpScreen>
     super.dispose();
   }
 
-  // ── Validation ──────────────────────────────
+  // ── Validation ───────────────────────────────────────────────────────
   String? _validate() {
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
@@ -66,50 +66,34 @@ class _SignUpScreenState extends State<SignUpScreen>
     return null;
   }
 
-  // ── Sign Up handler ──────────────────────────
+  // ── Sign Up handler ──────────────────────────────────────────────────
   Future<void> _handleSignUp() async {
-    // Step 1: validate
     final error = _validate();
     if (error != null) {
       _showSnack(error, isError: true);
       return;
     }
 
-    // Step 2: build SignupRequestModel
-    final SignupRequestModel request = SignupRequestModel(
+    setState(() => _isLoading = true);
+
+    // ✅ NEW: service returns typed AuthResponse directly
+    final AuthResponse response = await SuperAdminService.signup(
       name: _nameController.text.trim(),
       email: _emailController.text.trim(),
       password: _passwordController.text,
       mobile: _mobileController.text.trim(),
     );
 
-    // Step 3: call API
-    setState(() => _isLoading = true);
-
-    final Map<String, dynamic> raw = await SuperAdminService.signup(
-      name: request.name,
-      email: request.email,
-      password: request.password,
-      mobile: request.mobile,
-    );
-
     if (!mounted) return;
     setState(() => _isLoading = false);
 
-    // Step 4: parse into AuthResponseModel
-    final AuthResponseModel response = AuthResponseModel.fromJson(
-      raw,
-      success: raw['success'] ?? false,
-    );
-
-    // Step 5: handle
     if (response.success) {
       _showSnack(
         response.message.isNotEmpty
             ? response.message
             : 'Account created successfully!',
       );
-      Navigator.pop(context);
+      Navigator.pop(context); // go back to login
     } else {
       _showSnack(
         response.message.isNotEmpty ? response.message : 'Sign up failed',
@@ -139,11 +123,7 @@ class _SignUpScreenState extends State<SignUpScreen>
     final isLarge = screenH > 850;
 
     final hPad = screenW * 0.07;
-    final titleSz = isSmall
-        ? 22.0
-        : isLarge
-        ? 30.0
-        : 26.0;
+    final titleSz = isSmall ? 22.0 : isLarge ? 30.0 : 26.0;
     final subSz = isSmall ? 13.0 : 15.0;
     final fieldH = isSmall ? 48.0 : 56.0;
     final btnH = isSmall ? 46.0 : 54.0;
@@ -166,6 +146,7 @@ class _SignUpScreenState extends State<SignUpScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // ── Top Bar ────────────────────────────────────────
                   Padding(
                     padding: EdgeInsets.symmetric(
                       horizontal: hPad,
@@ -201,6 +182,7 @@ class _SignUpScreenState extends State<SignUpScreen>
 
                   SizedBox(height: topGap),
 
+                  // ── Form ────────────────────────────────────────────
                   FadeTransition(
                     opacity: _fadeAnimation,
                     child: SlideTransition(
@@ -281,6 +263,7 @@ class _SignUpScreenState extends State<SignUpScreen>
                             ),
                             SizedBox(height: screenH * 0.032),
 
+                            // ── SIGN UP Button ───────────────────────
                             SizedBox(
                               width: double.infinity,
                               height: btnH,
@@ -298,7 +281,8 @@ class _SignUpScreenState extends State<SignUpScreen>
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: ElevatedButton(
-                                  onPressed: _isLoading ? null : _handleSignUp,
+                                  onPressed:
+                                      _isLoading ? null : _handleSignUp,
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: Colors.transparent,
                                     shadowColor: Colors.transparent,

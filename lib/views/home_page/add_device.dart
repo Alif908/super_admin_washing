@@ -1,187 +1,211 @@
 part of 'dashboard.dart';
 
 mixin _AddDeviceMixin<T extends StatefulWidget> on State<T> {
-  // ── live list of devices ──
-  List<DeviceModel> _devices = [];
-
-  // ── fetch all devices ──
-  Future<void> _fetchDevices() async {
-    try {
-      final raw = await SuperAdminService.getAllDevices();
-      if (raw['success'] == true) {
-        final list = (raw['data'] as List? ?? raw['devices'] as List? ?? [])
-            .map((e) => DeviceModel.fromJson(e))
-            .toList();
-        if (mounted) setState(() => _devices = list);
-        debugPrint('✅ [DEVICES] total:${_devices.length}');
-      }
-    } catch (e) {
-      debugPrint('❌ [DEVICES] $e');
-    }
+  /// ── ADD ──────────────────────────────────────────────────────────────────
+  void _showAddDeviceDialog(
+    BuildContext ctx,
+    double ssz, {
+    required void Function(Map<String, String>) onAdd,
+  }) {
+    showEditDeviceDialog(ctx, existing: null, onSave: onAdd);
   }
 
-  void _showAddDeviceDialog(BuildContext ctx, double ssz) {
-    final deviceIdCtrl = TextEditingController();
-    final sw = MediaQuery.of(ctx).size.width;
+  /// ── EDIT / ADD (core dialog) ──────────────────────────────────────────
+  /// • existing == null  → "Add Device" mode  (shows Device ID field only)
+  /// • existing != null  → "Edit Device" mode (shows Name + Condition fields)
+  void showEditDeviceDialog(
+    BuildContext ctx, {
+    Map<String, String>? existing,
+    required void Function(Map<String, String>) onSave,
+  }) {
+    final isEdit = existing != null;
 
-    bool _submitting = false;
+    final deviceIdCtrl = TextEditingController(
+      text: existing?['deviceId'] ?? '',
+    );
+    final deviceNameCtrl = TextEditingController(
+      text: existing?['deviceName'] ?? '',
+    );
+    final conditionCtrl = TextEditingController(
+      text: existing?['condition'] ?? '',
+    );
+
+    final sw = MediaQuery.of(ctx).size.width;
+    final ssz = sw < 360
+        ? 11.0
+        : sw < 400
+        ? 12.0
+        : 13.0;
 
     showDialog(
       context: ctx,
-      barrierColor: Colors.black.withOpacity(0.7),
-      builder: (_) => StatefulBuilder(
-        builder: (dialogCtx, setDialogState) => Dialog(
-          backgroundColor: _card,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          insetPadding:
-              EdgeInsets.symmetric(horizontal: sw * 0.05, vertical: 40),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ── Title row ──────────────────────────────────────────
+      barrierColor: Colors.black.withOpacity(0.75),
+      builder: (_) => Dialog(
+        backgroundColor: const Color(0xFF111827),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        insetPadding: EdgeInsets.symmetric(horizontal: sw * 0.05, vertical: 60),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Title row ────────────────────────────────────────────
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    isEdit ? 'Edit Device' : 'Add Device',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => Navigator.pop(ctx),
+                    child: const Icon(
+                      Icons.close,
+                      color: Colors.white70,
+                      size: 22,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 28),
+
+              // ── Add mode: single Device ID field ────────────────────
+              if (!isEdit) ...[
+                _fieldLabel('Device ID', ssz),
+                const SizedBox(height: 8),
+                _inputBox(
+                  controller: deviceIdCtrl,
+                  hint: 'Scan or type device ID',
+                  ssz: ssz,
+                ),
+                const SizedBox(height: 24),
+              ],
+
+              // ── Edit mode: side-by-side Device Name + Condition ─────
+              if (isEdit) ...[
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Add Device',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: ssz + 4,
-                        fontWeight: FontWeight.bold,
+                    // Device Name
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _fieldLabel('Device Name', ssz),
+                          const SizedBox(height: 8),
+                          _inputBox(
+                            controller: deviceNameCtrl,
+                            hint: 'Device Name',
+                            ssz: ssz,
+                          ),
+                        ],
                       ),
                     ),
-                    GestureDetector(
-                      onTap: () => Navigator.pop(dialogCtx),
-                      child: const Icon(
-                        Icons.close,
-                        color: Colors.white,
-                        size: 22,
+                    const SizedBox(width: 16),
+                    // Condition
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _fieldLabel('Condition', ssz),
+                          const SizedBox(height: 8),
+                          _inputBox(
+                            controller: conditionCtrl,
+                            hint: 'Good / Bad',
+                            ssz: ssz,
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 22),
-
-                // ── Device ID field ────────────────────────────────────
-                Text(
-                  'Device ID',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: ssz,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  decoration: BoxDecoration(
-                    color: _field,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: TextField(
-                    controller: deviceIdCtrl,
-                    style: TextStyle(color: Colors.white, fontSize: ssz),
-                    decoration: const InputDecoration(
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 12,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 22),
-
-                // ── Submit ─────────────────────────────────────────────
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton(
-                    onPressed: _submitting
-                        ? null
-                        : () async {
-                            // ── validation ───────────────────────
-                            final deviceId = deviceIdCtrl.text.trim();
-                            if (deviceId.isEmpty) {
-                              _showDeviceSnack(ctx, 'Device ID is required');
-                              return;
-                            }
-
-                            // ── call API ─────────────────────────
-                            setDialogState(() => _submitting = true);
-
-                            final raw = await SuperAdminService.addDevice(
-                              deviceId: deviceId,
-                            );
-
-                            setDialogState(() => _submitting = false);
-
-                            if (raw['success'] == true) {
-                              await _fetchDevices();
-                              if (dialogCtx.mounted) {
-                                Navigator.pop(dialogCtx);
-                              }
-                              _showDeviceSnack(
-                                ctx,
-                                raw['message'] ?? 'Device added successfully!',
-                                success: true,
-                              );
-                            } else {
-                              _showDeviceSnack(
-                                ctx,
-                                raw['message'] ?? 'Failed to add device',
-                              );
-                            }
-                          },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _submitting
-                          ? Colors.grey
-                          : const Color(0xFFE53935),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: _submitting
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : Text(
-                            'Add Device',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: ssz + 1,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                  ),
-                ),
+                const SizedBox(height: 28),
               ],
-            ),
+
+              // ── Submit button ────────────────────────────────────────
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isEdit ? const Color(0xFFE53935) : _blue,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    elevation: 0,
+                  ),
+                  onPressed: () {
+                    final id = deviceIdCtrl.text.trim();
+
+                    if (!isEdit && id.isEmpty) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(
+                          backgroundColor: _red,
+                          content: Text('Device ID cannot be empty'),
+                        ),
+                      );
+                      return;
+                    }
+
+                    Navigator.pop(ctx);
+                    onSave({
+                      'deviceId': id,
+                      'deviceName': deviceNameCtrl.text.trim(),
+                      'condition': conditionCtrl.text.trim(),
+                    });
+                  },
+                  child: Text(
+                    isEdit ? 'Update Device' : 'Add Device',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
-
-  // ── snackbar helper ──────────────────────────────────────────────────────
-  void _showDeviceSnack(BuildContext ctx, String msg, {bool success = false}) {
-    if (!ctx.mounted) return;
-    ScaffoldMessenger.of(ctx).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: success ? _green : _red,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 3),
-      ),
-    );
-  }
 }
+
+// ── Shared field helpers ───────────────────────────────────────────────────
+Widget _fieldLabel(String text, double ssz) => Text(
+  text,
+  style: TextStyle(
+    color: Colors.white,
+    fontSize: ssz,
+    fontWeight: FontWeight.w500,
+  ),
+);
+
+Widget _inputBox({
+  required TextEditingController controller,
+  required String hint,
+  required double ssz,
+}) => Container(
+  decoration: BoxDecoration(
+    color: const Color(0xFF1E2A45),
+    borderRadius: BorderRadius.circular(10),
+  ),
+  child: TextField(
+    controller: controller,
+    style: TextStyle(color: Colors.white, fontSize: ssz),
+    decoration: InputDecoration(
+      hintText: hint,
+      hintStyle: TextStyle(color: _dim, fontSize: ssz),
+      border: InputBorder.none,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+    ),
+  ),
+);

@@ -3,6 +3,7 @@ import 'package:super_admin_washing/models/superadminmodel.dart';
 import 'package:super_admin_washing/services/SuperAdminApiService.dart';
 import 'package:super_admin_washing/views/home_page/dashboard.dart';
 import 'package:super_admin_washing/views/sign_up_page.dart';
+import 'package:super_admin_washing/views/home_page/dashboard.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -13,8 +14,8 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen>
     with SingleTickerProviderStateMixin {
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _isLoading = false;
 
@@ -48,7 +49,6 @@ class _LoginScreenState extends State<LoginScreen>
     super.dispose();
   }
 
-  // ── Validation ──────────────────────────────────────────────────────────
   String? _validate() {
     final email = _emailController.text.trim();
     final password = _passwordController.text;
@@ -58,44 +58,27 @@ class _LoginScreenState extends State<LoginScreen>
     return null;
   }
 
-  // ── Login handler ────────────────────────────────────────────────────────
   Future<void> _handleLogin() async {
-    // Step 1: validate
     final error = _validate();
     if (error != null) {
       _showSnack(error, isError: true);
       return;
     }
 
-    // Step 2: build LoginRequestModel
-    final LoginRequestModel request = LoginRequestModel(
-      email: _emailController.text.trim(),
-      password: _passwordController.text,
-    );
-
-    // Step 3: call API
     setState(() => _isLoading = true);
 
-    final Map<String, dynamic> raw = await SuperAdminService.login(
-      email: request.email,
-      password: request.password,
+    final AuthResponse response = await SuperAdminService.login(
+      email: _emailController.text.trim(),
+      password: _passwordController.text,
     );
 
     if (!mounted) return;
     setState(() => _isLoading = false);
 
-    // Step 4: parse into AuthResponseModel
-    final AuthResponseModel response = AuthResponseModel.fromJson(
-      raw,
-      success: raw['success'] ?? false,
-    );
-
-    // Step 5: handle result
     if (response.success) {
-      // token already saved in SharedPreferences by service
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const FleetDashboardScreen()),
+        MaterialPageRoute(builder: (_) => const DashboardScreen()),
       );
     } else {
       _showSnack(
@@ -117,7 +100,6 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  // ── Build ────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
@@ -156,7 +138,6 @@ class _LoginScreenState extends State<LoginScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Top Bar
                   Padding(
                     padding: EdgeInsets.symmetric(
                       horizontal: hPad,
@@ -166,14 +147,12 @@ class _LoginScreenState extends State<LoginScreen>
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const SignUpScreen(),
-                              ),
-                            );
-                          },
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const SignUpScreen(),
+                            ),
+                          ),
                           child: Row(
                             children: [
                               Text(
@@ -199,7 +178,6 @@ class _LoginScreenState extends State<LoginScreen>
 
                   SizedBox(height: topGap),
 
-                  // Form
                   FadeTransition(
                     opacity: _fadeAnimation,
                     child: SlideTransition(
@@ -259,7 +237,6 @@ class _LoginScreenState extends State<LoginScreen>
                             ),
                             SizedBox(height: screenH * 0.032),
 
-                            // LOGIN button
                             SizedBox(
                               width: double.infinity,
                               height: btnH,
@@ -308,10 +285,11 @@ class _LoginScreenState extends State<LoginScreen>
                             ),
                             SizedBox(height: screenH * 0.024),
 
-                            // Forgot password
                             Center(
                               child: GestureDetector(
-                                onTap: () {},
+                                onTap: () {
+                                  // TODO: implement forgot password
+                                },
                                 child: Text(
                                   'Forgot your password?',
                                   style: TextStyle(

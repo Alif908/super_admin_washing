@@ -1,127 +1,132 @@
 part of 'dashboard.dart';
 
-mixin _DownloadReportMixin<T extends StatefulWidget> on State<T> {
+mixin _DownloadReportMixin on State<DashboardScreen> {
+  // ── Abstract members that _State must provide ──────────────────────────
+  List<WashHistoryModel> get _washHistory;
+  String? _deviceStringIdById(int? numericId);
+  String? _deviceNameById(int? numericId);
+  String _hubNameById(int? id);
+  String? _userNameById(int? userId);
+
+  // ── Implementation ─────────────────────────────────────────────────────
   Future<void> _downloadFullReport() async {
     try {
-      // ── Fetch live wash history from API ───────────────────────────
-      final raw = await SuperAdminService.getAllWashHistory();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: _blue,
+          duration: Duration(seconds: 2),
+          content: Row(
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 2,
+                ),
+              ),
+              SizedBox(width: 12),
+              Text(
+                'Preparing CSV report...',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
 
-      List<WashHistoryModel> history = [];
-      if (raw['success'] == true) {
-        history = (raw['data'] as List? ?? [])
-            .map((e) => WashHistoryModel.fromJson(e))
-            .toList();
-      }
-
-      if (history.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('No wash history available to export.'),
-              backgroundColor: _red,
-            ),
-          );
-        }
-        return;
-      }
-
-      // ── Build CSV from live data ───────────────────────────────────
-      const headers = [
+      final List<List<dynamic>> rows = [];
+      rows.add([
         'Order ID',
         'Device ID',
         'Device Name',
         'Hub',
         'User',
-        'Amount',
-        'Date',
-      ];
+        'Amount (Rs)',
+        'Final Amount (Rs)',
+        'Discount (Rs)',
+        'Coupon Code',
+        'Date & Time',
+      ]);
 
-      final csvBuffer = StringBuffer();
-      csvBuffer.writeln(headers.map(_csvEscape).join(','));
-
-      for (final w in history) {
-        final row = [
-          '${w.id}',
-          w.device?.deviceId ?? '-',
-          w.device?.deviceName ?? '-',
-          w.hub?.hubName ?? '-',
-          w.user?.name ?? '-',
-          w.finalAmount != null ? w.finalAmount!.toStringAsFixed(2) : '0.00',
-          w.createdAt ?? '-',
-        ];
-        csvBuffer.writeln(row.map(_csvEscape).join(','));
+      for (final w in _washHistory) {
+        rows.add([
+          w.orderId ?? w.id,
+          w.device?.deviceId ?? _deviceStringIdById(w.deviceId) ?? '-',
+          w.device?.deviceName ??
+              _deviceNameById(w.deviceId) ??
+              w.packageName ??
+              '-',
+          w.hub?.hubName ?? _hubNameById(w.hubId),
+          w.user?.name ?? _userNameById(w.userId) ?? '-',
+          (w.amount ?? 0).toStringAsFixed(2),
+          (w.finalAmount ?? w.amount ?? 0).toStringAsFixed(2),
+          w.discountAmount.toStringAsFixed(2),
+          w.couponCode ?? '-',
+          _formatDateCsv(w.createdAt),
+        ]);
       }
 
-      final csvString = csvBuffer.toString();
+      final csvData = _convertToCsv(rows);
+      final directory = await getTemporaryDirectory();
+      final now = DateTime.now();
+      final fileName =
+          'wash_report_${now.year}${_pad(now.month)}${_pad(now.day)}'
+          '_${_pad(now.hour)}${_pad(now.minute)}.csv';
+      final file = File('${directory.path}/$fileName');
+      await file.writeAsString(csvData, encoding: utf8);
 
-      // ── Resolve save path ──────────────────────────────────────────
-      final timestamp = DateTime.now()
-          .toIso8601String()
-          .replaceAll(':', '-')
-          .substring(0, 19);
-      final fileName = 'fleet_report_$timestamp.csv';
-
-      Directory? saveDir;
-
-      if (Platform.isAndroid) {
-        saveDir = Directory('/storage/emulated/0/Download');
-        if (!await saveDir.exists()) {
-          saveDir = await getExternalStorageDirectory();
-        }
-      } else if (Platform.isIOS) {
-        saveDir = await getApplicationDocumentsDirectory();
-      } else {
-        saveDir = await getTemporaryDirectory();
-      }
-
-      final file = File('${saveDir!.path}/$fileName');
-      await file.writeAsString(csvString);
-
-      debugPrint('✅ [REPORT] saved ${history.length} rows → ${file.path}');
-
+      await Share.shareXFiles([
+        XFile(file.path, mimeType: 'text/csv', name: fileName),
+      ], subject: 'Wash Fleet Report - ${_formatDateSimple(now)}');
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: _green,
-            duration: const Duration(seconds: 4),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  '✅ Report saved successfully!',
-                  style: TextStyle(
-                    color: Colors.black,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  Platform.isAndroid
-                      ? 'Check your Downloads folder\n$fileName'
-                      : 'Saved to Files app\n$fileName',
-                  style: const TextStyle(color: Colors.black87, fontSize: 11),
-                ),
-              ],
+            backgroundColor: _red,
+            content: Text(
+              'Failed to generate report: $e',
+              style: const TextStyle(color: Colors.white),
             ),
           ),
         );
       }
-    } catch (e) {
-      debugPrint('❌ [REPORT] $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export failed: $e'), backgroundColor: _red),
-        );
-      }
     }
   }
 
-  String _csvEscape(String value) {
-    if (value.contains(',') || value.contains('"') || value.contains('\n')) {
-      return '"${value.replaceAll('"', '""')}"';
+  String _convertToCsv(List<List<dynamic>> rows) {
+    final buffer = StringBuffer();
+    for (final row in rows) {
+      buffer.writeln(
+        row
+            .map((cell) {
+              final v = cell?.toString() ?? '';
+              return (v.contains(',') || v.contains('"') || v.contains('\n'))
+                  ? '"${v.replaceAll('"', '""')}"'
+                  : v;
+            })
+            .join(','),
+      );
     }
-    return value;
+    return buffer.toString();
   }
+
+  String _formatDateCsv(String? raw) {
+    if (raw == null) return '-';
+    try {
+      final dt = DateTime.parse(raw).toLocal();
+      return '${dt.day}/${dt.month}/${dt.year} '
+          '${_pad(dt.hour)}:${_pad(dt.minute)}';
+    } catch (_) {
+      return raw;
+    }
+  }
+
+  String _formatDateSimple(DateTime dt) =>
+      '${dt.day}-${_pad(dt.month)}-${dt.year}';
+
+  String _pad(int n) => n.toString().padLeft(2, '0');
 }
